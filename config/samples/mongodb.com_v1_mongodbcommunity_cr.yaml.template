@@ -1,0 +1,149 @@
+---
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: mongodb
+spec:
+  members: 3
+  type: ReplicaSet
+  # 设置Mongo版本
+  version: "4.0.28"
+  security:
+    authentication:
+      modes: ["SCRAM"]
+  users:
+    # 设置管理员用户权限
+    - name: admin
+      db: admin
+      passwordSecretRef: # a reference to the secret that will be used to generate the user's password
+        name: mongodb-admin-password
+      roles:
+        - name: clusterAdmin
+          db: admin
+        - name: userAdminAnyDatabase
+          db: admin
+      scramCredentialsSecretName: admin-scram
+    # 设置exporter用户权限
+    - name: exporter
+      db: admin
+      passwordSecretRef: # a reference to the secret that will be used to generate the user's password
+        name: mongodb-exporter-password
+      roles:
+        - name: clusterMonitor
+          db: admin
+        - name: read
+          db: local
+      scramCredentialsSecretName: exporter-scram
+    # 设置esb用户权限
+    - name: esb
+      db: esb
+      passwordSecretRef: # a reference to the secret that will be used to generate the user's password
+        name: mongodb-esb-password
+      roles:
+        - name: dbOwner
+          db: esb
+      scramCredentialsSecretName: esb-scram
+    # 设置hcsb用户权限
+    - name: hcsb
+      db: hcsb
+      passwordSecretRef: # a reference to the secret that will be used to generate the user's password
+        name: mongodb-hcsb-password
+      roles:
+        - name: dbOwner
+          db: hcsb
+      scramCredentialsSecretName: hcsb-scram
+  additionalMongodConfig:
+    storage.wiredTiger.engineConfig.journalCompressor: zlib
+    # 内存限制大小
+    storage.wiredTiger.engineConfig.cacheSizeGB: <your-cache-size-here>
+  statefulSet:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mongod
+            image: registry-hz.rubikstack.com/library/mongo:4.0.28
+            resources:
+              limits:
+                cpu: <your-cpu-limit-here>
+                memory: <your-mem-limit-here>Gi    
+          - name: mongodb-monitor
+            env:
+            - name: EXPORTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-exporter-password
+                  key: password
+            - name: MONGODB_URI
+              value: mongodb://exporter:$(EXPORTER_PASSWORD)@127.0.0.1:27017/
+            image: registry-hz.rubikstack.com/library/mongodb_exporter:0.33
+            imagePullPolicy: IfNotPresent
+            ports:
+            - name: metrics
+              containerPort: 9216
+              protocol: TCP
+            resources:
+              limits:
+                cpu: "0.5"
+                memory: 800M
+              requests:
+                cpu: "0.5"
+                memory: 500M
+      volumeClaimTemplates:
+        - metadata:
+            name: data-volume
+          spec:
+            storageClassName: fast
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: <your-data-volume-size-here>Gi
+        - metadata:
+            name: logs-volume
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            resources:
+              requests:
+                storage: 8G
+            storageClassName: fast
+
+# the user credentials will be generated from this secret
+# once the credentials are generated, this secret is no longer required
+---
+# admin用户密码secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-admin-password
+type: Opaque
+stringData:
+  password: <admin-password-here>
+---
+# exporter用户密码secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-exporter-password
+type: Opaque
+stringData:
+  password: <exporter-password-here>
+---
+# esb用户密码secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-esb-password
+type: Opaque
+stringData:
+  password: <esb-password-here>
+---
+# hcsb用户密码secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-hcsb-password
+type: Opaque
+stringData:
+  password: <hcsb-password-here>

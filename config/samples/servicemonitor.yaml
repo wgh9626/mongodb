@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mongodb-exporter-monitoring
+spec:
+  selector:
+    matchLabels:
+      app: mongodb-svc
+  endpoints:
+  - honorLabels: true
+    interval: 30s
+    port: mongodb-exporter
+  namespaceSelector:
+    any: true
